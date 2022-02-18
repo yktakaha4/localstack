@@ -24,6 +24,7 @@ from localstack.utils.xml import strip_xmlns
 
 
 class TestEdgeAPI:
+    @pytest.mark.skip(reason="Challenger: Test uses S3 via edge API (not supported yet)")
     def test_invoke_apis_via_edge(self):
         edge_url = config.get_edge_url()
 
