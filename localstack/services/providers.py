@@ -28,6 +28,14 @@ def cloudformation():
     return Service("cloudformation", start=cloudformation_starter.start_cloudformation)
 
 
+@aws_provider(api="cloudformation", name="asf")
+def cloudformation_asf():
+    from localstack.aws.proxy import AwsApiListener
+    from localstack.services.cloudformation.provider import CfnProvider
+    provider = CfnProvider()
+    return Service("cloudformation", listener=AwsApiListener("cloudformation", provider), lifecycle_hook=provider)
+
+
 @aws_provider(api="config")
 def awsconfig():
     from localstack.services.configservice.provider import ConfigProvider
