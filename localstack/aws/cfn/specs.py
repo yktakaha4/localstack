@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-
 import cfnlint
+import cfnlint.core as core
 
 SPECS = {}
 SCHEMAS = {}
@@ -23,7 +23,6 @@ def load_specs():
                 except Exception as e:
                     print(f"FAILED FOR file: {file}")
                     logging.error(e)
-                # return
 
     for k, v in SPECS.items():
         MERGED[k] = {
@@ -40,4 +39,25 @@ def load_specs():
 
     print(f"Supported schemas: {len(SUPPORTED_SCHEMAS)=}")
     print(f"merged size: {len(MERGED)=}")
+
+
+    filename = "/home/dominik/work/localstack/localstack/localstack/aws/cfn/cdk_bootstrap_v10.yaml"
+    (args, filenames, formatter) = core.get_args_filenames([filename])
+    (template, rules, errors) = core.get_template_rules(filename, args)
+    template_obj = cfnlint.template.Template(filename, template)
+    graph = cfnlint.graph.Graph(template_obj)
+
+    # simulated deployment loop
+
+    assert graph.graph.is_directed()
+
+    # first get all nodes without incoming edges
+    roots = [k for k,v in graph.graph.in_degree() if v == 0]
+    for root in roots:
+        # deploy this resource
+        print(f"deploying L1 {root}")
+
+    # TODO: take different approach here by waiting for a finish event (CREATE_COMPLETE or error)
+
+
 

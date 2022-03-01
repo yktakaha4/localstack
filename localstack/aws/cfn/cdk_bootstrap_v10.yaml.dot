@@ -1,0 +1,31 @@
+digraph "template" {
+FileAssetsBucketEncryptionKey [label="FileAssetsBucketEncryptionKey\n<AWS::KMS::Key>"];
+FileAssetsBucketEncryptionKeyAlias [label="FileAssetsBucketEncryptionKeyAlias\n<AWS::KMS::Alias>"];
+StagingBucket [label="StagingBucket\n<AWS::S3::Bucket>"];
+StagingBucketPolicy [label="StagingBucketPolicy\n<AWS::S3::BucketPolicy>"];
+ContainerAssetsRepository [label="ContainerAssetsRepository\n<AWS::ECR::Repository>"];
+FilePublishingRole [label="FilePublishingRole\n<AWS::IAM::Role>"];
+ImagePublishingRole [label="ImagePublishingRole\n<AWS::IAM::Role>"];
+LookupRole [label="LookupRole\n<AWS::IAM::Role>"];
+FilePublishingRoleDefaultPolicy [label="FilePublishingRoleDefaultPolicy\n<AWS::IAM::Policy>"];
+ImagePublishingRoleDefaultPolicy [label="ImagePublishingRoleDefaultPolicy\n<AWS::IAM::Policy>"];
+DeploymentActionRole [label="DeploymentActionRole\n<AWS::IAM::Role>"];
+CloudFormationExecutionRole [label="CloudFormationExecutionRole\n<AWS::IAM::Role>"];
+CdkBootstrapVersion [label="CdkBootstrapVersion\n<AWS::SSM::Parameter>"];
+FileAssetsBucketEncryptionKey -> FilePublishingRole  [key=0, label=Sub];
+FileAssetsBucketEncryptionKeyAlias -> FileAssetsBucketEncryptionKey  [key=0, label=Ref];
+StagingBucket -> FileAssetsBucketEncryptionKey  [key=0, label=Sub];
+StagingBucketPolicy -> StagingBucket  [key=0, label=Ref];
+StagingBucketPolicy -> StagingBucket  [key=1, label=Sub];
+StagingBucketPolicy -> StagingBucket  [key=2, label=Sub];
+FilePublishingRoleDefaultPolicy -> FilePublishingRole  [key=0, label=Ref];
+FilePublishingRoleDefaultPolicy -> StagingBucket  [key=0, label=Sub];
+FilePublishingRoleDefaultPolicy -> StagingBucket  [key=1, label=Sub];
+FilePublishingRoleDefaultPolicy -> FileAssetsBucketEncryptionKey  [key=0, label=Sub];
+ImagePublishingRoleDefaultPolicy -> ImagePublishingRole  [key=0, label=Ref];
+ImagePublishingRoleDefaultPolicy -> ContainerAssetsRepository  [key=0, label=Sub];
+DeploymentActionRole -> CloudFormationExecutionRole  [key=0, label=Sub];
+DeploymentActionRole -> StagingBucket  [key=0, label=Sub];
+DeploymentActionRole -> StagingBucket  [key=1, label=Sub];
+DeploymentActionRole -> CdkBootstrapVersion  [key=0, label=Sub];
+}
