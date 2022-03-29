@@ -174,9 +174,10 @@ class ProxyListenerEdge(ProxyListener):
             lock_ctx = empty_context_manager()
 
         with lock_ctx:
-            result = get_asf_challenge_listener(api).forward_request(method, path, data, headers)
-            if result is not True:
-                return result
+            try:
+                get_asf_challenge_listener(api).forward_request(method, path, data, headers)
+            except Exception as e:
+                LOG.warning("exception during ASF challenge: %s", e)
 
             result = do_forward_request(api, method, path, data, headers, port=port)
             if should_log_trace and result not in [None, False, True]:
