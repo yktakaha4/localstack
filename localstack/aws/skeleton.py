@@ -14,6 +14,7 @@ from localstack.aws.api import (
 from localstack.aws.api.core import ServiceRequest, ServiceRequestHandler, ServiceResponse
 from localstack.aws.protocol.parser import create_parser
 from localstack.aws.protocol.serializer import create_serializer
+from localstack.aws.recorder import ApiRequestRecorder
 from localstack.aws.spec import load_service
 from localstack.utils import analytics
 
@@ -117,6 +118,9 @@ class ServiceRequestDispatcher:
         return self.fn(*args, **kwargs)
 
 
+request_recorder = ApiRequestRecorder()
+
+
 class Skeleton:
     service: ServiceModel
     dispatch_table: DispatchTable
@@ -139,6 +143,7 @@ class Skeleton:
             # otherwise, parse the incoming HTTPRequest
             operation, instance = self.parser.parse(context.request)
             context.operation = operation
+            context.service_request = instance
 
         try:
             # Find the operation's handler in the dispatch table
@@ -164,6 +169,9 @@ class Skeleton:
         # Call the appropriate handler
         result = handler(context, instance) or {}
 
+        # record the api call
+        request_recorder.record(context.service.service_name, context.operation.name, instance)
+
         # if the service handler returned an HTTP request, forego serialization and return immediately
         if isinstance(result, HttpResponse):
             return result
@@ -181,6 +189,12 @@ class Skeleton:
         :param exception: the exception that was raised
         :return: an HttpResponse object
         """
+
+        # record the api call
+        request_recorder.record(
+            context.service.service_name, context.operation.name, context.service_request
+        )
+
         return self.serializer.serialize_error_to_response(exception, context.operation)
 
     def on_not_implemented_error(self, context: RequestContext) -> HttpResponse:

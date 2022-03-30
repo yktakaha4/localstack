@@ -294,6 +294,22 @@ jobs:
             COVERAGE_FILE="target/coverage/.coverage.<< parameters.platform >>.${CIRCLE_NODE_INDEX}" \
             TEST_PATH=$TEST_FILES \
             make docker-run-tests
+
+      - run:
+          name: Archive recorder pickles
+          command: |
+            cd target
+            mkdir -p api-requests
+            mkdir -p api-responses
+            mkdir -p recorder
+            sudo tar czf api-requests-<< parameters.platform >>-${CIRCLE_NODE_INDEX}.tar.gz api-requests
+            sudo tar czf api-responses-<< parameters.platform >>-${CIRCLE_NODE_INDEX}.tar.gz api-responses
+            mv *.tar.gz recorder
+          when: always
+
+      - store_artifacts:
+          path: target/recorder/
+
       - store_test_results:
           path: target/reports/
       - persist_to_workspace:
