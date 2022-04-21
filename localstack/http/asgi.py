@@ -2,7 +2,6 @@ import asyncio
 import io
 import logging
 import math
-import time
 import typing as t
 from asyncio import AbstractEventLoop
 from concurrent.futures import Executor
@@ -10,18 +9,18 @@ from urllib.parse import urlparse
 
 if t.TYPE_CHECKING:
     from _typeshed import WSGIApplication, WSGIEnvironment
-    from asgiref.typing import (
-        ASGI3Application,
-        ASGIReceiveCallable,
-        ASGISendCallable,
-        HTTPScope,
-        Scope,
-    )
+    from asgiref.typing import ASGIReceiveCallable, ASGISendCallable, HTTPScope, Scope
 
 LOG = logging.getLogger(__name__)
 
 
-def _populate_standard_keys(environ: "WSGIEnvironment", scope: "HTTPScope"):
+def populate_wsgi_environment(environ: "WSGIEnvironment", scope: "HTTPScope"):
+    """
+    Adds the non-IO parts (e.g., excluding wsgi.input) from the ASGI HTTPScope to the WSGI Environment.
+
+    :param environ: the WSGI environment to populate
+    :param scope: the ASGI scope as source
+    """
     environ["REQUEST_METHOD"] = scope["method"]
     # path/uri info
     environ["SCRIPT_NAME"] = scope.get("root_path", "").rstrip("/")
@@ -51,16 +50,13 @@ def _populate_standard_keys(environ: "WSGIEnvironment", scope: "HTTPScope"):
     # headers
     for name, value in scope["headers"]:
         key = name.decode("latin1").upper().replace("-", "_")
-        environ[f"HTTP_{key}"] = value.decode("latin1")
 
-    if "HTTP_CONTENT_TYPE" in environ:
-        environ["CONTENT_TYPE"] = environ["HTTP_CONTENT_TYPE"]
+        if key not in ["CONTENT_TYPE", "CONTENT_LENGTH"]:
+            key = f"HTTP_{key}"
 
-    if "HTTP_CONTENT_LENGTH" in environ:
-        environ["CONTENT_LENGTH"] = environ["HTTP_CONTENT_LENGTH"]
+        environ[key] = value.decode("latin1")
 
-
-def _populate_wsgi_keys(environ: "WSGIEnvironment", scope: "HTTPScope"):
+    # wsgi specific keys
     environ["wsgi.version"] = (1, 0)
     environ["wsgi.url_scheme"] = scope.get("scheme", "http")
     environ["wsgi.errors"] = io.BytesIO()
@@ -84,6 +80,7 @@ class HTTPRequestEventStreamAdapter:
 
     def read(self, size: int = -1) -> bytes:
         # TODO: better implementation
+        # TODO: disconnect events
 
         if size != -1:
             raise NotImplementedError("can only read from stream exhaustively")
@@ -98,7 +95,6 @@ class HTTPRequestEventStreamAdapter:
             if body:
                 arr.extend(body)
             more = event.get("more_body", False)
-        print(arr)
 
         return arr
 
@@ -170,6 +166,37 @@ class WsgiStartResponse:
             await self.send({"type": "http.response.body", "body": b"", "more_body": False})
 
 
+async def to_async_generator(
+    it: t.Iterator,
+    loop: t.Optional[AbstractEventLoop] = None,
+    executor: t.Optional[Executor] = None,
+) -> t.AsyncGenerator:
+    """
+    Wraps a given synchronous Iterator as an async generator, where each invocation to ``next(it)``
+    will be wrapped in a coroutine execution.
+
+    :param it: the iterator to wrap
+    :param loop: the event loop to run the next invocations
+    :param executor: the executor to run the synchronous code
+    :return: an async generator
+    """
+    loop = loop or asyncio.get_event_loop()
+    stop = object()
+
+    def _next_sync():
+        try:
+            # this call may potentially call blocking IO, which is why we call it in an executor
+            return next(it)
+        except StopIteration:
+            return stop
+
+    while True:
+        val = await loop.run_in_executor(executor, _next_sync)
+        if val is stop:
+            return
+        yield val
+
+
 class ASGIAdapter:
     """
     Adapter to expose a WSGIApplication as an ASGI3Application. This allows you to serve synchronous WSGI applications
@@ -216,8 +243,7 @@ class ASGIAdapter:
         :return: a WSGIEnvironment
         """
         environ: "WSGIEnvironment" = {}
-        _populate_standard_keys(environ, scope)
-        _populate_wsgi_keys(environ, scope)
+        populate_wsgi_environment(environ, scope)
         # add IO wrappers
         environ["wsgi.input"] = HTTPRequestEventStreamAdapter(receive, event_loop=self.event_loop)
         environ["wsgi.input_terminated"] = True
@@ -227,55 +253,24 @@ class ASGIAdapter:
         self, scope: "HTTPScope", receive: "ASGIReceiveCallable", send: "ASGISendCallable"
     ):
         env = self.to_wsgi_environment(scope, receive)
+
         response = WsgiStartResponse(send, self.event_loop)
 
-        data = await self.event_loop.run_in_executor(self.executor, self.wsgi_app, env, response)
+        iterable = await self.event_loop.run_in_executor(
+            self.executor, self.wsgi_app, env, response
+        )
 
-        if data:
-            for packet in data:
-                await response.write(packet)
+        try:
+            if iterable:
+                # Generators are also Iterators
+                if isinstance(iterable, t.Iterator):
+                    iterable = to_async_generator(iterable)
 
-        await response.close()
-
-
-def main():
-    def create_app() -> "WSGIApplication":
-        from werkzeug import Request, Response
-
-        def gen():
-            yield b"foo"
-            time.sleep(1)
-            yield b"bar\n"
-            time.sleep(1)
-            yield b"ed\n"
-
-        @Request.application
-        def app(request: Request) -> Response:
-            print("making request")
-            print("data: ", request.get_data(as_text=True))
-            time.sleep(1)
-            print("making response")
-
-            response = Response(gen(), 200)
-
-            return response
-
-        return app
-
-    wsgi_app = create_app()
-    asgi_app = ASGI3Application(wsgi_app)
-
-    from hypercorn import Config
-    from hypercorn.asyncio import serve
-    from hypercorn.typing import ASGI3Framework
-
-    cfg = Config()
-    cfg.use_reloader = True
-
-    loop = asyncio.get_event_loop()
-    hypercorn_app = t.cast(ASGI3Framework, asgi_app)
-    loop.run_until_complete(serve(hypercorn_app, cfg))
-
-
-if __name__ == "__main__":
-    main()
+                if isinstance(iterable, (t.AsyncIterator, t.AsyncIterable)):
+                    async for packet in iterable:
+                        await response.write(packet)
+                else:
+                    for packet in iterable:
+                        await response.write(packet)
+        finally:
+            await response.close()

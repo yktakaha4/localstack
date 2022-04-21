@@ -3,8 +3,7 @@ import asyncio
 from hypercorn import Config
 from hypercorn.asyncio import serve as serve_hypercorn
 
-from localstack.aws.gateway import Gateway
-
+from ..gateway import Gateway
 from .asgi import AsgiGateway
 
 
