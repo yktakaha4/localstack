@@ -37,6 +37,7 @@ from localstack.aws.api.sqs import (
     Integer,
     InvalidAttributeName,
     InvalidMessageContents,
+    ListDeadLetterSourceQueuesResult,
     ListQueuesResult,
     ListQueueTagsResult,
     Message,
@@ -645,6 +646,29 @@ class SqsProvider(SqsApi, ServiceLifecycleHook):
         - Delivery guarantees
         - The region is not encoded in the queue URL
     """
+
+    def list_dead_letter_source_queues(
+        self,
+        context: RequestContext,
+        queue_url: String,
+        next_token: Token = None,
+        max_results: BoxedInteger = None,
+    ) -> ListDeadLetterSourceQueuesResult:
+        urls = []
+        dead_letter_queue = self._resolve_queue(context, queue_url=queue_url)
+        for queue in self.queues.values():
+
+            if queue.key.region != context.region:
+                continue
+            if queue.key.account_id != context.account_id:
+                continue
+            policy = queue.attributes.get(QueueAttributeName.RedrivePolicy)
+            if policy:
+                policy = json.loads(policy)
+                dlq_arn = policy.get("deadLetterTargetArn")
+                if dlq_arn == dead_letter_queue.arn:
+                    urls.append(queue.url(context))
+        return ListDeadLetterSourceQueuesResult(queueUrls=urls)
 
     queues: Dict[QueueKey, SqsQueue]
 
