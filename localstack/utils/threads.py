@@ -29,6 +29,7 @@ class FuncThread(threading.Thread):
         self.on_stop = on_stop
 
     def run(self):
+        result = None
         try:
             kwargs = {}
             argspec = inspect.getfullargspec(self.func)
