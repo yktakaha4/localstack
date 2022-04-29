@@ -35,7 +35,6 @@ test_init_functions = set()
 @pytest.hookimpl()
 def pytest_configure(config):
     # first pytest lifecycle hook
-    logger.warning("EXITING")
     _start_monitor()
 
 
@@ -77,6 +76,7 @@ def pytest_runtestloop(session):
 @pytest.hookimpl()
 def pytest_unconfigure(config):
     # last pytest lifecycle hook (before pytest exits)
+    logger.warning("EXITING")
     _trigger_stop()
 
 
