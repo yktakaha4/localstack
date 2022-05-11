@@ -1,4 +1,6 @@
+import json
 import os
+from os import path
 
 from localstack.utils.aws import aws_stack
 
@@ -16,3 +18,13 @@ def get_lambda_logs(func_name, logs_client=None):
         logGroupName=log_group_name, logStreamName=streams[0]["logStreamName"]
     )["events"]
     return log_events
+
+
+def write_snapshot_samples(fn, svc, operation):
+    for i in range(1, 3):
+        response = fn()
+        fname = path.join(
+            path.dirname(__file__), "sample-snapshots", f"{svc}.{operation}.response.{i}.json"
+        )
+        with open(fname, "w") as fd:
+            fd.write(json.dumps(response))
