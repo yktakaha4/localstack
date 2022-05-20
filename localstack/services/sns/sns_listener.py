@@ -18,7 +18,6 @@ from moto.sns.models import SNSBackend as MotoSNSBackend
 from requests.models import Request, Response
 
 from localstack.config import external_service_url
-from localstack.constants import MOTO_ACCOUNT_ID, TEST_AWS_ACCOUNT_ID
 from localstack.services.awslambda import lambda_api
 from localstack.services.generic_proxy import RegionBackend
 from localstack.utils.analytics import event_publisher
@@ -307,7 +306,6 @@ class ProxyListenerSNS(PersistingProxyListener):
                 do_untag_resource(topic_arn, tags_to_remove)
                 return make_response(req_action)
 
-            data = self._reset_account_id(data)
             return Request(data=data, headers=headers, method=method)
 
         return True
@@ -329,18 +327,6 @@ class ProxyListenerSNS(PersistingProxyListener):
                 return False
         do_tag_resource(topic_arn, tags)
         return True
-
-    @staticmethod
-    def _reset_account_id(data):
-        """Fix account ID in request payload. All external-facing responses contain our
-        predefined account ID (defaults to 000000000000), whereas the backend endpoint
-        from moto expects a different hardcoded account ID (123456789012)."""
-        return aws_stack.fix_account_id_in_arns(
-            data,
-            colon_delimiter="%3A",
-            existing=TEST_AWS_ACCOUNT_ID,
-            replace=MOTO_ACCOUNT_ID,
-        )
 
     def return_response(self, method, path, data, headers, response):
         # persist requests to disk

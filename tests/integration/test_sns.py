@@ -7,10 +7,10 @@ import time
 import pytest
 import requests
 from botocore.exceptions import ClientError
+from moto.core import get_account_id
 
 from localstack import config
 from localstack.config import external_service_url
-from localstack.constants import TEST_AWS_ACCOUNT_ID
 from localstack.http import Request
 from localstack.services.generic_proxy import ProxyListener
 from localstack.services.infra import start_proxy
@@ -797,7 +797,7 @@ class TestSNSProvider:
         response = sns_create_topic(Name=topic_name)
         topic_arn_params = response["TopicArn"].split(":")
         testutil.response_arn_matches_partition(sns_client, response["TopicArn"])
-        assert topic_arn_params[4] == TEST_AWS_ACCOUNT_ID
+        assert topic_arn_params[4] == get_account_id()
         assert topic_arn_params[5] == topic_name
 
     def test_publish_message_by_target_arn(
